@@ -1,7 +1,7 @@
 --!strict
 --!native
 
-local Types = require('../Types')
+local Types = require("../Types")
 
 type Codec<T> = Types.Codec<T>
 
@@ -12,7 +12,7 @@ local function create_u8(capacity: number): Codec<string>
 	local SIZE = PREFIX_SIZE + capacity
 
 	local function validate(value: string): ()
-		if type(value) ~= 'string' then
+		if type(value) ~= "string" then
 			error(`Serdes.string({capacity}) expected string, got {typeof(value)}`)
 		end
 
@@ -21,7 +21,7 @@ local function create_u8(capacity: number): Codec<string>
 		end
 	end
 
-	local function write(target: buffer, offset: number, value: string): ()
+	local function unsafe_write(target: buffer, offset: number, value: string): ()
 		local length = #value
 		local payload_offset = offset + PREFIX_SIZE
 
@@ -38,7 +38,61 @@ local function create_u8(capacity: number): Codec<string>
 		end
 	end
 
-	local function read(source: buffer, offset: number): string
+	local function unsafe_write_fresh(target: buffer, offset: number, value: string): ()
+		local length = #value
+
+		buffer.writeu8(target, offset, length)
+
+		if length > 0 then
+			buffer.writestring(target, offset + PREFIX_SIZE, value)
+		end
+	end
+
+	local function write(target: buffer, offset: number, value: string): ()
+		if type(value) ~= "string" then
+			error(`Serdes.string({capacity}) expected string, got {typeof(value)}`)
+		end
+
+		local length = #value
+
+		if length > capacity then
+			error(`Serdes.string({capacity}) expected at most {capacity} bytes, got {length}`)
+		end
+
+		local payload_offset = offset + PREFIX_SIZE
+
+		buffer.writeu8(target, offset, length)
+
+		if length > 0 then
+			buffer.writestring(target, payload_offset, value)
+		end
+
+		local unused = capacity - length
+
+		if unused > 0 then
+			buffer.fill(target, payload_offset + length, 0, unused)
+		end
+	end
+
+	local function write_fresh(target: buffer, offset: number, value: string): ()
+		if type(value) ~= "string" then
+			error(`Serdes.string({capacity}) expected string, got {typeof(value)}`)
+		end
+
+		local length = #value
+
+		if length > capacity then
+			error(`Serdes.string({capacity}) expected at most {capacity} bytes, got {length}`)
+		end
+
+		buffer.writeu8(target, offset, length)
+
+		if length > 0 then
+			buffer.writestring(target, offset + PREFIX_SIZE, value)
+		end
+	end
+
+	local function read(source: buffer, offset: number, _output: string?): string
 		local length = buffer.readu8(source, offset)
 
 		if length > capacity then
@@ -46,7 +100,17 @@ local function create_u8(capacity: number): Codec<string>
 		end
 
 		if length == 0 then
-			return ''
+			return ""
+		end
+
+		return buffer.readstring(source, offset + PREFIX_SIZE, length)
+	end
+
+	local function unsafe_read(source: buffer, offset: number, _output: string?): string
+		local length = buffer.readu8(source, offset)
+
+		if length == 0 then
+			return ""
 		end
 
 		return buffer.readstring(source, offset + PREFIX_SIZE, length)
@@ -54,10 +118,15 @@ local function create_u8(capacity: number): Codec<string>
 
 	return table.freeze({
 		size = SIZE,
+		delta_safe = true,
 
 		validate = validate,
+		unsafe_write = unsafe_write,
 		write = write,
+		unsafe_write_fresh = unsafe_write_fresh,
+		write_fresh = write_fresh,
 		read = read,
+		unsafe_read = unsafe_read,
 	})
 end
 
@@ -66,7 +135,7 @@ local function create_u16(capacity: number): Codec<string>
 	local SIZE = PREFIX_SIZE + capacity
 
 	local function validate(value: string): ()
-		if type(value) ~= 'string' then
+		if type(value) ~= "string" then
 			error(`Serdes.string({capacity}) expected string, got {typeof(value)}`)
 		end
 
@@ -75,7 +144,7 @@ local function create_u16(capacity: number): Codec<string>
 		end
 	end
 
-	local function write(target: buffer, offset: number, value: string): ()
+	local function unsafe_write(target: buffer, offset: number, value: string): ()
 		local length = #value
 		local payload_offset = offset + PREFIX_SIZE
 
@@ -92,7 +161,61 @@ local function create_u16(capacity: number): Codec<string>
 		end
 	end
 
-	local function read(source: buffer, offset: number): string
+	local function unsafe_write_fresh(target: buffer, offset: number, value: string): ()
+		local length = #value
+
+		buffer.writeu16(target, offset, length)
+
+		if length > 0 then
+			buffer.writestring(target, offset + PREFIX_SIZE, value)
+		end
+	end
+
+	local function write(target: buffer, offset: number, value: string): ()
+		if type(value) ~= "string" then
+			error(`Serdes.string({capacity}) expected string, got {typeof(value)}`)
+		end
+
+		local length = #value
+
+		if length > capacity then
+			error(`Serdes.string({capacity}) expected at most {capacity} bytes, got {length}`)
+		end
+
+		local payload_offset = offset + PREFIX_SIZE
+
+		buffer.writeu16(target, offset, length)
+
+		if length > 0 then
+			buffer.writestring(target, payload_offset, value)
+		end
+
+		local unused = capacity - length
+
+		if unused > 0 then
+			buffer.fill(target, payload_offset + length, 0, unused)
+		end
+	end
+
+	local function write_fresh(target: buffer, offset: number, value: string): ()
+		if type(value) ~= "string" then
+			error(`Serdes.string({capacity}) expected string, got {typeof(value)}`)
+		end
+
+		local length = #value
+
+		if length > capacity then
+			error(`Serdes.string({capacity}) expected at most {capacity} bytes, got {length}`)
+		end
+
+		buffer.writeu16(target, offset, length)
+
+		if length > 0 then
+			buffer.writestring(target, offset + PREFIX_SIZE, value)
+		end
+	end
+
+	local function read(source: buffer, offset: number, _output: string?): string
 		local length = buffer.readu16(source, offset)
 
 		if length > capacity then
@@ -100,7 +223,17 @@ local function create_u16(capacity: number): Codec<string>
 		end
 
 		if length == 0 then
-			return ''
+			return ""
+		end
+
+		return buffer.readstring(source, offset + PREFIX_SIZE, length)
+	end
+
+	local function unsafe_read(source: buffer, offset: number, _output: string?): string
+		local length = buffer.readu16(source, offset)
+
+		if length == 0 then
+			return ""
 		end
 
 		return buffer.readstring(source, offset + PREFIX_SIZE, length)
@@ -108,15 +241,26 @@ local function create_u16(capacity: number): Codec<string>
 
 	return table.freeze({
 		size = SIZE,
+		delta_safe = true,
 
 		validate = validate,
+		unsafe_write = unsafe_write,
 		write = write,
+		unsafe_write_fresh = unsafe_write_fresh,
+		write_fresh = write_fresh,
 		read = read,
+		unsafe_read = unsafe_read,
 	})
 end
 
-local function create(capacity: number): Codec<string>
-	if type(capacity) ~= 'number' or not math.isfinite(capacity) or capacity % 1 ~= 0 or capacity < 1 or capacity > MAX_CAPACITY then
+return function(capacity: number): Codec<string>
+	if
+		type(capacity) ~= "number"
+		or not math.isfinite(capacity)
+		or capacity % 1 ~= 0
+		or capacity < 1
+		or capacity > MAX_CAPACITY
+	then
 		error(`Serdes.string expected an integer capacity in [1, {MAX_CAPACITY}], got {capacity}`)
 	end
 
@@ -126,5 +270,3 @@ local function create(capacity: number): Codec<string>
 
 	return create_u16(capacity)
 end
-
-return create

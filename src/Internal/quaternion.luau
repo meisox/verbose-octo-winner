@@ -1,7 +1,17 @@
 --!strict
 --!native
 
-local function matrix_to_quaternion(r00: number, r01: number, r02: number, r10: number, r11: number, r12: number, r20: number, r21: number, r22: number): (number, number, number, number)
+local function matrix_to_quaternion(
+	r00: number,
+	r01: number,
+	r02: number,
+	r10: number,
+	r11: number,
+	r12: number,
+	r20: number,
+	r21: number,
+	r22: number
+): (number, number, number, number)
 	local trace = r00 + r11 + r22
 
 	if trace > 0 then
