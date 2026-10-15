@@ -2,14 +2,17 @@
 --!native
 
 local Types = require("@self/Types")
+local check_bounds = require("@self/Internal/bounds")
+local nullable_batch_count = require("@self/Internal/array_count")(1_073_741_824, true, "encode_many")
 
 export type Codec<T> = Types.Codec<T>
 export type DeltaCodec<T> = Types.DeltaCodec<T>
 export type DynamicCodec<T> = Types.DynamicCodec<T>
 export type DynamicField<T> = Types.DynamicField<T>
 export type Field<T> = Types.Field<T>
+export type Infer<C> = Types.Infer<C>
 
-type Array<T> = Types.Array<T>
+type Array<T> = Types.DynamicArray<T>
 type ArrayWriter<T> = Types.ArrayWriter<T>
 type ArrayReader<T> = Types.ArrayReader<T>
 
@@ -39,6 +42,7 @@ local function unsafe_encode<T>(codec: Codec<T>, value: T): buffer
 end
 
 local function into<T>(codec: Codec<T>, target: buffer, offset: number, value: T): number
+	check_bounds(target, offset, codec.size)
 	codec.write(target, offset, value)
 	return offset + codec.size
 end
@@ -48,7 +52,7 @@ local function unsafe_into<T>(codec: Codec<T>, target: buffer, offset: number, v
 	return offset + codec.size
 end
 
-local function decode<T>(codec: Codec<T>, source: buffer): T
+local function decode<C>(codec: C & Codec<any>, source: buffer): Types.Infer<C>
 	if type(source) ~= "buffer" then
 		error(`Serdes.decode expected buffer, got {typeof(source)}`)
 	end
@@ -63,7 +67,7 @@ local function decode<T>(codec: Codec<T>, source: buffer): T
 	return codec.read(source, 0)
 end
 
-local function decode_into<T>(codec: Codec<T>, source: buffer, output: T): T
+local function decode_into<C>(codec: C & Codec<any>, source: buffer, output: Types.Infer<C>): Types.Infer<C>
 	if type(source) ~= "buffer" then
 		error(`Serdes.decode_into expected buffer, got {typeof(source)}`)
 	end
@@ -78,27 +82,29 @@ local function decode_into<T>(codec: Codec<T>, source: buffer, output: T): T
 	return codec.read(source, 0, output)
 end
 
-local function unsafe_decode<T>(codec: Codec<T>, source: buffer): T
+local function unsafe_decode<C>(codec: C & Codec<any>, source: buffer): Types.Infer<C>
 	return codec.unsafe_read(source, 0)
 end
 
-local function unsafe_decode_into<T>(codec: Codec<T>, source: buffer, output: T): T
+local function unsafe_decode_into<C>(codec: C & Codec<any>, source: buffer, output: Types.Infer<C>): Types.Infer<C>
 	return codec.unsafe_read(source, 0, output)
 end
 
-local function from<T>(codec: Codec<T>, source: buffer, offset: number): (T, number)
+local function from<C>(codec: C & Codec<any>, source: buffer, offset: number): (Types.Infer<C>, number)
+	check_bounds(source, offset, codec.size)
 	return codec.read(source, offset), offset + codec.size
 end
 
-local function from_into<T>(codec: Codec<T>, source: buffer, offset: number, output: T): (T, number)
+local function from_into<C>(codec: C & Codec<any>, source: buffer, offset: number, output: Types.Infer<C>): (Types.Infer<C>, number)
+	check_bounds(source, offset, codec.size)
 	return codec.read(source, offset, output), offset + codec.size
 end
 
-local function unsafe_from<T>(codec: Codec<T>, source: buffer, offset: number): (T, number)
+local function unsafe_from<C>(codec: C & Codec<any>, source: buffer, offset: number): (Types.Infer<C>, number)
 	return codec.unsafe_read(source, offset), offset + codec.size
 end
 
-local function unsafe_from_into<T>(codec: Codec<T>, source: buffer, offset: number, output: T): (T, number)
+local function unsafe_from_into<C>(codec: C & Codec<any>, source: buffer, offset: number, output: Types.Infer<C>): (Types.Infer<C>, number)
 	return codec.unsafe_read(source, offset, output), offset + codec.size
 end
 
@@ -107,10 +113,10 @@ local function encode_many<T>(codec: Codec<T>, values: Array<T>): buffer
 		error(`Serdes.encode_many expected table, got {typeof(values)}`)
 	end
 
-	local count = #values
+	local count = if codec.nullable then nullable_batch_count(values :: any) else #values
 	local size = codec.size * count
 
-	if not math.isfinite(size) then
+	if not math.isfinite(size) or size > 1_073_741_824 then
 		error("Serdes.encode_many encoded size overflowed")
 	end
 
@@ -135,7 +141,7 @@ local function encode_many<T>(codec: Codec<T>, values: Array<T>): buffer
 end
 
 local function unsafe_encode_many<T>(codec: Codec<T>, values: Array<T>): buffer
-	local count = #values
+	local count = if codec.nullable then (values :: any).n else #values
 	local target = buffer.create(codec.size * count)
 	local bulk_write = codec.array_unsafe_write_fresh
 
@@ -168,7 +174,7 @@ local function decode_many_with<T>(
 
 	if bulk_reader ~= nil then
 		local reader_many: ArrayReader<T> = bulk_reader
-		result = reader_many(source, 0, count, output)
+		result = reader_many(source, 0, count, output) :: Array<T>
 	else
 		result = if output == nil then table.create(count) :: Array<T> else output
 		local offset = 0
@@ -183,6 +189,7 @@ local function decode_many_with<T>(
 	for index = #result, count + 1, -1 do
 		result[index] = nil :: any
 	end
+	result.n = if codec.nullable then count else nil
 
 	return result
 end
@@ -207,14 +214,14 @@ local function many_count<T>(codec: Codec<T>, source: buffer, api: string): numb
 	return size // stride
 end
 
-local function decode_many<T>(codec: Codec<T>, source: buffer): Array<T>
+local function decode_many<C>(codec: C & Codec<any>, source: buffer): Array<Types.Infer<C>>
 	local count = many_count(codec, source, "decode_many")
 	return decode_many_with(codec, source, count, nil, codec.read, codec.array_read)
 end
 
-local function decode_many_into<T>(codec: Codec<T>, source: buffer, output: Array<T>): Array<T>
+local function decode_many_into<C>(codec: C & Codec<any>, source: buffer, output: Array<Types.Infer<C>>): Array<Types.Infer<C>>
 	local count = many_count(codec, source, "decode_many_into")
-	return decode_many_with(codec, source, count, output, codec.read, codec.array_read)
+	return decode_many_with(codec, source, count, output :: Array<any>, codec.read, codec.array_read)
 end
 
 local function unsafe_many_count<T>(codec: Codec<T>, source: buffer, api: string): number
@@ -227,14 +234,14 @@ local function unsafe_many_count<T>(codec: Codec<T>, source: buffer, api: string
 	return buffer.len(source) // stride
 end
 
-local function unsafe_decode_many<T>(codec: Codec<T>, source: buffer): Array<T>
+local function unsafe_decode_many<C>(codec: C & Codec<any>, source: buffer): Array<Types.Infer<C>>
 	local count = unsafe_many_count(codec, source, "unsafe_decode_many")
 	return decode_many_with(codec, source, count, nil, codec.unsafe_read, codec.array_unsafe_read)
 end
 
-local function unsafe_decode_many_into<T>(codec: Codec<T>, source: buffer, output: Array<T>): Array<T>
+local function unsafe_decode_many_into<C>(codec: C & Codec<any>, source: buffer, output: Array<Types.Infer<C>>): Array<Types.Infer<C>>
 	local count = unsafe_many_count(codec, source, "unsafe_decode_many_into")
-	return decode_many_with(codec, source, count, output, codec.unsafe_read, codec.array_unsafe_read)
+	return decode_many_with(codec, source, count, output :: Array<any>, codec.unsafe_read, codec.array_unsafe_read)
 end
 
 return table.freeze({
@@ -254,14 +261,17 @@ return table.freeze({
 	array = require("@self/Composite/array"),
 	tuple = require("@self/Composite/tuple"),
 	object = require("@self/Composite/object"),
+	struct = require("@self/Composite/struct"),
+	packed_struct = require("@self/Composite/packed_struct"),
 	packed = require("@self/Composite/packed"),
+	packed_array = require("@self/Composite/packed_array"),
 	range = require("@self/Composite/range"),
 	enum = require("@self/Composite/enum"),
 	flags = require("@self/Composite/flags"),
 	optional = require("@self/Composite/optional"),
 	quantized = require("@self/Composite/quantized"),
 	delta = require("@self/Delta"),
-	dynamic = require("@self/Dynamic/init"),
+	dynamic = require("@self/Dynamic"),
 	compressed = require("@self/Compressed"),
 
 	color3_3 = require("@self/Roblox/color3_3"),
@@ -271,6 +281,10 @@ return table.freeze({
 	vector2_8 = require("@self/Roblox/vector2_8"),
 	vector3_8 = require("@self/Roblox/vector3_8"),
 	vector3_12 = require("@self/Roblox/vector3_12"),
+	quantized_vector2 = require("@self/Roblox/quantized_vector2"),
+	quantized_vector3 = require("@self/Roblox/quantized_vector3"),
+	cframe = require("@self/Roblox/cframe"),
+	cframe_16 = require("@self/Roblox/cframe_16"),
 
 	cframe_12 = require("@self/Roblox/cframe_12"),
 	cframe_28 = require("@self/Roblox/cframe_28"),

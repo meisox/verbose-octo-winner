@@ -2,6 +2,7 @@
 --!native
 
 local quaternion = require("../Internal/quaternion")
+local validate_rotation = require("../Internal/rotation")
 
 local matrix_to_quaternion = quaternion.matrix_to_quaternion
 local choose_smallest_three = quaternion.choose_smallest_three
@@ -23,6 +24,8 @@ local ROTATION_MAX = 2_047
 local ROTATION_ENCODE_SCALE = ROTATION_MAX / (2 * INVERSE_SQRT_TWO)
 
 local ROTATION_DECODE_SCALE = (2 * INVERSE_SQRT_TWO) / ROTATION_MAX
+
+local checked_omitted = require("../Internal/smallest_three")(ROTATION_DECODE_SCALE)
 
 local function validate(value: CFrame): ()
 	if typeof(value) ~= "CFrame" then
@@ -53,6 +56,7 @@ local function validate(value: CFrame): ()
 	then
 		error(`Serdes.cframe_12 expected finite position in [{POSITION_MINIMUM}, {POSITION_MAXIMUM}]`)
 	end
+	validate_rotation(r00, r01, r02, r10, r11, r12, r20, r21, r22)
 end
 
 local function unsafe_write(target: buffer, offset: number, value: CFrame): ()
@@ -106,6 +110,7 @@ local function write(target: buffer, offset: number, value: CFrame): ()
 	then
 		error(`Serdes.cframe_12 expected finite position in [{POSITION_MINIMUM}, {POSITION_MAXIMUM}]`)
 	end
+	validate_rotation(r00, r01, r02, r10, r11, r12, r20, r21, r22)
 
 	local ix = math.round((px - POSITION_MINIMUM) * POSITION_ENCODE_SCALE)
 	local iy = math.round((py - POSITION_MINIMUM) * POSITION_ENCODE_SCALE)
@@ -146,8 +151,7 @@ local function read(source: buffer, offset: number, _output: CFrame?): CFrame
 	local b = bit32.extract(word2, 9, 11) * ROTATION_DECODE_SCALE - INVERSE_SQRT_TWO
 	local c = bit32.extract(word2, 20, 11) * ROTATION_DECODE_SCALE - INVERSE_SQRT_TWO
 
-	local omitted_squared = 1 - (a * a + b * b + c * c)
-	local omitted = math.sqrt(math.max(0, omitted_squared))
+	local omitted = checked_omitted(a, b, c)
 
 	local px = POSITION_MINIMUM + ix * POSITION_DECODE_SCALE
 	local py = POSITION_MINIMUM + iy * POSITION_DECODE_SCALE

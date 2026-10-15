@@ -1,0 +1,215 @@
+{
+  "trials": 7,
+  "baseline": "0327edf02a82b52bd1d1401b98d253e98dfe7ced",
+  "version": "0.742.0.7421053",
+  "warmups": 2,
+  "rows": [
+    {
+      "old_bytes": 4,
+      "old_ns": 126.57999759539962,
+      "new_ns": 81.67999912984669,
+      "operation": "encode",
+      "ratio": 0.6452836204889867,
+      "new_bytes": 3,
+      "name": "packed24"
+    },
+    {
+      "old_bytes": 4,
+      "old_ns": 125.33999979496002,
+      "new_ns": 83.93999887630343,
+      "operation": "decode_reuse",
+      "ratio": 0.6696984124271452,
+      "new_bytes": 3,
+      "name": "packed24"
+    },
+    {
+      "old_bytes": 18,
+      "old_ns": 166.680000256747,
+      "new_ns": 121.94000300951302,
+      "operation": "encode",
+      "ratio": 0.7315814904108571,
+      "new_bytes": 18,
+      "name": "snapshot"
+    },
+    {
+      "old_bytes": 18,
+      "old_ns": 166.99000261723995,
+      "new_ns": 115.35999947227538,
+      "operation": "decode_reuse",
+      "ratio": 0.6908197955819763,
+      "new_bytes": 18,
+      "name": "snapshot"
+    },
+    {
+      "old_bytes": 1024,
+      "old_ns": 4039.0000212937593,
+      "new_ns": 3998.90000699088,
+      "operation": "encode",
+      "ratio": 0.9900717964616313,
+      "new_bytes": 1024,
+      "name": "fixed_u32_256"
+    },
+    {
+      "old_bytes": 1024,
+      "old_ns": 681.2000065110624,
+      "new_ns": 740.6000513583422,
+      "operation": "decode_reuse",
+      "ratio": 1.0871991254837359,
+      "new_bytes": 1024,
+      "name": "fixed_u32_256"
+    },
+    {
+      "old_bytes": 1026,
+      "old_ns": 14095.99999897182,
+      "new_ns": 5307.899962645024,
+      "operation": "encode",
+      "ratio": 0.3765536296135208,
+      "new_bytes": 1026,
+      "name": "dynamic_u32_256"
+    },
+    {
+      "old_bytes": 1026,
+      "old_ns": 7629.500003531575,
+      "new_ns": 746.9999836757779,
+      "operation": "decode_reuse",
+      "ratio": 0.09790942831509318,
+      "new_bytes": 1026,
+      "name": "dynamic_u32_256"
+    },
+    {
+      "old_bytes": 413,
+      "old_ns": 4493.69999114424,
+      "new_ns": 1466.90005203709,
+      "operation": "encode",
+      "ratio": 0.3264347987021649,
+      "new_bytes": 413,
+      "name": "dynamic_record"
+    },
+    {
+      "old_bytes": 413,
+      "old_ns": 2796.0999868810177,
+      "new_ns": 463.69998017326,
+      "operation": "decode_reuse",
+      "ratio": 0.16583812537065462,
+      "new_bytes": 413,
+      "name": "dynamic_record"
+    },
+    {
+      "old_bytes": 5,
+      "old_ns": 1569.0000145696104,
+      "new_ns": 1605.1999991759658,
+      "operation": "encode",
+      "ratio": 1.023072010369793,
+      "new_bytes": 5,
+      "name": "rle_256"
+    },
+    {
+      "old_bytes": 5,
+      "old_ns": 703.4000009298325,
+      "new_ns": 712.399953044951,
+      "operation": "decode_reuse",
+      "ratio": 1.0127949276417705,
+      "new_bytes": 5,
+      "name": "rle_256"
+    },
+    {
+      "old_bytes": 2,
+      "old_ns": 68.19500122219324,
+      "new_ns": 59.529999271035194,
+      "operation": "encode",
+      "ratio": 0.8729378723386821,
+      "new_bytes": 2,
+      "name": "varu32"
+    },
+    {
+      "old_bytes": 2,
+      "old_ns": 50.25500140618533,
+      "new_ns": 52.95499868225306,
+      "operation": "decode_reuse",
+      "ratio": 1.053725941707673,
+      "new_bytes": 2,
+      "name": "varu32"
+    },
+    {
+      "old_bytes": 13,
+      "old_ns": 92.04000234603882,
+      "new_ns": 95.75500153005123,
+      "operation": "encode",
+      "ratio": 1.0403628758074701,
+      "new_bytes": 13,
+      "name": "string_12"
+    },
+    {
+      "old_bytes": 13,
+      "old_ns": 73.8300004741177,
+      "new_ns": 68.24499869253486,
+      "operation": "decode_reuse",
+      "ratio": 0.9243532202936834,
+      "new_bytes": 13,
+      "name": "string_12"
+    },
+    {
+      "old_bytes": 12,
+      "old_ns": 133.7299996521324,
+      "new_ns": 175.86000030860305,
+      "operation": "encode",
+      "ratio": 1.3150377683845218,
+      "new_bytes": 12,
+      "name": "cframe_12"
+    },
+    {
+      "old_bytes": 12,
+      "old_ns": 127.25000269711018,
+      "new_ns": 107.44000319391489,
+      "operation": "decode_reuse",
+      "ratio": 0.8443222075967377,
+      "new_bytes": 12,
+      "name": "cframe_12"
+    },
+    {
+      "old_bytes": 28,
+      "old_ns": 145.58000257238746,
+      "new_ns": 174.85999851487577,
+      "operation": "encode",
+      "ratio": 1.2011264969440378,
+      "new_bytes": 28,
+      "name": "cframe_28"
+    },
+    {
+      "old_bytes": 28,
+      "old_ns": 122.51000152900815,
+      "new_ns": 142.79999886639416,
+      "operation": "decode_reuse",
+      "ratio": 1.1656191093311,
+      "new_bytes": 28,
+      "name": "cframe_28"
+    },
+    {
+      "old_bytes": 48,
+      "old_ns": 154.4600003398955,
+      "new_ns": 159.36000272631645,
+      "operation": "encode",
+      "ratio": 1.031723438920357,
+      "new_bytes": 48,
+      "name": "cframe_48"
+    },
+    {
+      "old_bytes": 48,
+      "old_ns": 123.13000042922795,
+      "new_ns": 132.02999834902585,
+      "operation": "decode_reuse",
+      "ratio": 1.0722813115306808,
+      "new_bytes": 48,
+      "name": "cframe_48"
+    }
+  ],
+  "new_codec": {
+    "bytes": 16,
+    "name": "cframe_16",
+    "encode_ns": 273.8900016993284,
+    "angular_error_degrees": 0.275066296122732,
+    "decode_reuse_ns": 216.9499988667667,
+    "unsafe_encode_ns": 213.00999796949327
+  },
+  "sourceHash": "064e6df8d18c1ff6c393a6eab6ea78ac5cb7e599aae210316ff5c53e1bfee433"
+}

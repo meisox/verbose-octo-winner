@@ -2,6 +2,7 @@
 --!native
 
 local Types = require("../Types")
+local schema_list = require("../Internal/schema_list")
 
 type Array<T> = Types.Array<T>
 type Dictionary<K, V> = Types.Dictionary<K, V>
@@ -9,7 +10,7 @@ type Codec<T> = Types.Codec<T>
 type Flags = Types.Flags
 
 return function(names: Array<string>): Codec<Flags>
-	local count = #names
+	local count = schema_list(names, "flags")
 
 	if count == 0 then
 		error("Serdes.flags expected at least one flag")

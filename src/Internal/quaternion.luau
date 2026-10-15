@@ -1,7 +1,7 @@
 --!strict
 --!native
 
-local function matrix_to_quaternion(
+local function raw_matrix_to_quaternion(
 	r00: number,
 	r01: number,
 	r02: number,
@@ -35,6 +35,16 @@ local function matrix_to_quaternion(
 
 		return (r02 + r20) * inverse, (r12 + r21) * inverse, 0.5 * s, (r10 - r01) * inverse
 	end
+end
+
+local function matrix_to_quaternion(
+	r00: number, r01: number, r02: number,
+	r10: number, r11: number, r12: number,
+	r20: number, r21: number, r22: number
+): (number, number, number, number)
+	local x, y, z, w = raw_matrix_to_quaternion(r00, r01, r02, r10, r11, r12, r20, r21, r22)
+	local inverse = 1 / math.sqrt(x*x + y*y + z*z + w*w)
+	return x * inverse, y * inverse, z * inverse, w * inverse
 end
 
 local function choose_smallest_three(qx: number, qy: number, qz: number, qw: number): (number, number, number, number)

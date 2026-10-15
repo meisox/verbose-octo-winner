@@ -2,6 +2,8 @@
 --!native
 
 local Types = require("../Types")
+local schema_list = require("../Internal/schema_list")
+local sequence = require("../Internal/sequence")
 
 type Array<T> = Types.Array<T>
 type Codec<T> = Types.Codec<T>
@@ -14,19 +16,11 @@ local function compile_writer(
 	offsets: Array<number>,
 	writers: Array<Writer>,
 	count: number,
-	validate_value: boolean
+	validate_value: ((value: Array<any>) -> ())?
 ): (target: buffer, offset: number, value: Array<any>) -> ()
 	if validate_value then
 		return function(target: buffer, offset: number, value: Array<any>): ()
-			if type(value) ~= "table" then
-				error(`Serdes.tuple expected table, got {typeof(value)}`)
-			end
-
-			local actual_count = #value
-
-			if actual_count ~= count then
-				error(`Serdes.tuple expected exactly {count} elements, got {actual_count}`)
-			end
+			validate_value(value)
 
 			for index = 1, count do
 				writers[index](target, offset + offsets[index], value[index])
@@ -49,16 +43,13 @@ local function compile_reader(offsets: Array<number>, readers: Array<ChildReader
 			result[index] = readers[index](source, offset + offsets[index], result[index])
 		end
 
+		for index = #result, count + 1, -1 do result[index] = nil end
 		return result
 	end
 end
 
 return function(codecs: Array<Codec<any>>): Codec<Array<any>>
-	local count = #codecs
-
-	if count == 0 then
-		error("Serdes.tuple expected at least one codec")
-	end
+	local count = schema_list(codecs, "tuple")
 
 	local offsets = table.create(count) :: Array<number>
 	local validators = table.create(count) :: Array<Validator>
@@ -69,10 +60,12 @@ return function(codecs: Array<Codec<any>>): Codec<Array<any>>
 	local readers = table.create(count) :: Array<ChildReader>
 	local unsafe_readers = table.create(count) :: Array<ChildReader>
 	local size = 0
+	local nullable = false
 
 	for index = 1, count do
 		local codec = codecs[index]
 		local length = codec.size
+		nullable = nullable or codec.nullable == true
 
 		if not math.isfinite(length) or length % 1 ~= 0 or length < 0 then
 			error(`Serdes.tuple codec {index} has invalid size {length}`)
@@ -89,21 +82,14 @@ return function(codecs: Array<Codec<any>>): Codec<Array<any>>
 
 		size += length
 
-		if not math.isfinite(size) then
+		if not math.isfinite(size) or size > 1_073_741_824 then
 			error("Serdes.tuple encoded size overflowed")
 		end
 	end
 
+	local validate_sequence = sequence(count, nullable, "tuple")
 	local function validate(value: Array<any>): ()
-		if type(value) ~= "table" then
-			error(`Serdes.tuple expected table, got {typeof(value)}`)
-		end
-
-		local actual_count = #value
-
-		if actual_count ~= count then
-			error(`Serdes.tuple expected exactly {count} elements, got {actual_count}`)
-		end
+		validate_sequence(value)
 
 		for index = 1, count do
 			validators[index](value[index])
@@ -114,10 +100,10 @@ return function(codecs: Array<Codec<any>>): Codec<Array<any>>
 		size = size,
 
 		validate = validate,
-		unsafe_write = compile_writer(offsets, unsafe_writers, count, false),
-		write = compile_writer(offsets, writers, count, true),
-		unsafe_write_fresh = compile_writer(offsets, unsafe_fresh_writers, count, false),
-		write_fresh = compile_writer(offsets, fresh_writers, count, true),
+		unsafe_write = compile_writer(offsets, unsafe_writers, count, nil),
+		write = compile_writer(offsets, writers, count, validate_sequence),
+		unsafe_write_fresh = compile_writer(offsets, unsafe_fresh_writers, count, nil),
+		write_fresh = compile_writer(offsets, fresh_writers, count, validate_sequence),
 		read = compile_reader(offsets, readers, count),
 		unsafe_read = compile_reader(offsets, unsafe_readers, count),
 	})

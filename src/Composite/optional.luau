@@ -14,7 +14,7 @@ return function<T>(codec: Codec<T>): Codec<T?>
 
 	local SIZE = payload_size + 1
 
-	if not math.isfinite(SIZE) then
+	if not math.isfinite(SIZE) or SIZE > 1_073_741_824 then
 		error("Serdes.optional encoded size overflowed")
 	end
 
@@ -25,6 +25,13 @@ return function<T>(codec: Codec<T>): Codec<T?>
 	local child_write_fresh = codec.write_fresh
 	local child_read = codec.read
 	local child_unsafe_read = codec.unsafe_read
+	local child_equal = codec.wire_equal
+	local wire_equal: ((T?, T?) -> boolean)? = nil
+	if child_equal then
+		wire_equal = function(a: T?, b: T?): boolean
+			return if a == nil or b == nil then a == b else child_equal(a, b)
+		end
+	end
 
 	local function validate(value: T?): ()
 		if value ~= nil then
@@ -108,7 +115,10 @@ return function<T>(codec: Codec<T>): Codec<T?>
 
 	return table.freeze({
 		size = SIZE,
+		nullable = true,
 		delta_safe = codec.delta_safe == true,
+		key_safe = codec.key_safe, key_less = codec.key_less :: any,
+		wire_equal = wire_equal,
 
 		validate = validate,
 		unsafe_write = unsafe_write,

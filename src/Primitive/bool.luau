@@ -70,7 +70,7 @@ local function array_write(target: buffer, offset: number, values: { boolean }, 
 end
 
 local function array_read(source: buffer, offset: number, count: number, output: { boolean }?): { boolean }
-	local result = if output == nil then table.create(count) else output
+	local result: {boolean} = if output == nil then table.create(count) :: {boolean} else output
 
 	for index = 1, count do
 		local encoded = buffer.readu8(source, offset + index - 1)
@@ -86,7 +86,7 @@ local function array_read(source: buffer, offset: number, count: number, output:
 end
 
 local function array_unsafe_read(source: buffer, offset: number, count: number, output: { boolean }?): { boolean }
-	local result = if output == nil then table.create(count) else output
+	local result: {boolean} = if output == nil then table.create(count) :: {boolean} else output
 
 	for index = 1, count do
 		result[index] = buffer.readu8(source, offset + index - 1) ~= 0
@@ -95,9 +95,18 @@ local function array_unsafe_read(source: buffer, offset: number, count: number, 
 	return result
 end
 
+local function array_validate(values: {boolean}, count: number): ()
+	for index = 1, count do
+		local value = values[index]
+		if type(value) ~= "boolean" then
+			error(`Serdes.bool received invalid array value at index {index}: {value}`)
+		end
+	end
+end
+
 return table.freeze({
 	size = SIZE,
-	delta_safe = true,
+	delta_safe = true, key_safe = true,
 
 	validate = validate,
 	unsafe_write = unsafe_write,
@@ -115,6 +124,7 @@ return table.freeze({
 
 	array_unsafe_write = array_unsafe_write,
 	array_write = array_write,
+	array_validate = array_validate,
 	array_unsafe_write_fresh = array_unsafe_write,
 	array_write_fresh = array_write,
 	array_read = array_read,

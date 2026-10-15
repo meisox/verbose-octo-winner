@@ -2,6 +2,7 @@
 --!native
 
 local Types = require("../Types")
+local uint24 = require("../Internal/uint24")
 local required_bits = require("../Internal/bits")
 
 type Codec<T> = Types.Codec<T>
@@ -97,7 +98,7 @@ return function(minimum: number, maximum: number): Codec<number>
 
 		return table.freeze({
 			size = 0,
-			delta_safe = true,
+			delta_safe = true, key_safe = true,
 
 			validate = validate,
 			unsafe_write = unsafe_write,
@@ -146,7 +147,7 @@ return function(minimum: number, maximum: number): Codec<number>
 
 		return table.freeze({
 			size = 1,
-			delta_safe = true,
+			delta_safe = true, key_safe = true,
 
 			validate = validate,
 			unsafe_write = unsafe_write,
@@ -195,7 +196,7 @@ return function(minimum: number, maximum: number): Codec<number>
 
 		return table.freeze({
 			size = 2,
-			delta_safe = true,
+			delta_safe = true, key_safe = true,
 
 			validate = validate,
 			unsafe_write = unsafe_write,
@@ -211,7 +212,55 @@ return function(minimum: number, maximum: number): Codec<number>
 			unpack = unpack,
 			unsafe_unpack = unsafe_unpack,
 		})
-	else
+	elseif span <= 16_777_215 then
+		local function unsafe_write(target: buffer, offset: number, value: number): ()
+			uint24.write(target, offset, value - minimum)
+		end
+
+		local function write(target: buffer, offset: number, value: number): ()
+			if type(value) ~= "number" then
+				error(`Serdes.range expected number, got {typeof(value)}`)
+			end
+
+			if value % 1 ~= 0 or value < minimum or value > maximum then
+				error(`Serdes.range expected integer in [{minimum}, {maximum}], got {value}`)
+			end
+
+			uint24.write(target, offset, value - minimum)
+		end
+
+		local function read(source: buffer, offset: number, _output: number?): number
+			local encoded = uint24.read(source, offset)
+
+			if encoded > span then
+				error(`Serdes.range decoded invalid value {encoded}`)
+			end
+
+			return encoded + minimum
+		end
+
+		local function unsafe_read(source: buffer, offset: number, _output: number?): number
+			return uint24.read(source, offset) + minimum
+		end
+
+		return table.freeze({
+			size = 3,
+			delta_safe = true, key_safe = true,
+
+			validate = validate,
+			unsafe_write = unsafe_write,
+			write = write,
+			unsafe_write_fresh = unsafe_write,
+			write_fresh = write,
+			read = read,
+			unsafe_read = unsafe_read,
+
+			bits = bits,
+			unsafe_pack = unsafe_pack,
+			pack = pack,
+			unpack = unpack,
+			unsafe_unpack = unsafe_unpack,
+		})	else
 		local function unsafe_write(target: buffer, offset: number, value: number): ()
 			buffer.writeu32(target, offset, value - minimum)
 		end
@@ -244,7 +293,7 @@ return function(minimum: number, maximum: number): Codec<number>
 
 		return table.freeze({
 			size = 4,
-			delta_safe = true,
+			delta_safe = true, key_safe = true,
 
 			validate = validate,
 			unsafe_write = unsafe_write,

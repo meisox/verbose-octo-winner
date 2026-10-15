@@ -2,6 +2,7 @@
 --!native
 
 local quaternion = require("../Internal/quaternion")
+local validate_rotation = require("../Internal/rotation")
 
 local matrix_to_quaternion = quaternion.matrix_to_quaternion
 
@@ -30,6 +31,7 @@ local function validate(value: CFrame): ()
 	then
 		error("Serdes.cframe_28 expected finite components")
 	end
+	validate_rotation(r00, r01, r02, r10, r11, r12, r20, r21, r22)
 end
 
 local function unsafe_write(target: buffer, offset: number, value: CFrame): ()
@@ -76,6 +78,7 @@ local function write(target: buffer, offset: number, value: CFrame): ()
 	then
 		error("Serdes.cframe_28 expected finite components")
 	end
+	validate_rotation(r00, r01, r02, r10, r11, r12, r20, r21, r22)
 
 	local qx, qy, qz, qw = matrix_to_quaternion(r00, r01, r02, r10, r11, r12, r20, r21, r22)
 
@@ -120,7 +123,7 @@ local function read(source: buffer, offset: number, _output: CFrame?): CFrame
 
 	local length_squared = qx * qx + qy * qy + qz * qz + qw * qw
 
-	if not math.isfinite(length_squared) or length_squared <= 0 or qw < 0 then
+	if not math.isfinite(length_squared) or math.abs(length_squared - 1) > 0.00001 or qw < 0 then
 		error("Serdes.cframe_28 decoded invalid quaternion")
 	end
 

@@ -1,0 +1,31 @@
+local S = require("./.generated/src/index")
+local first=S.struct({b=S.u16,a=S.u8})
+local second=S.struct({a=S.u8,b=S.u16})
+local value={a=1,b=0x0302}
+assert(buffer.tostring(S.encode(first,value))=="\1\2\3")
+assert(buffer.tostring(S.encode(first,value))==buffer.tostring(S.encode(second,value)))
+local ordered=S.struct({a=S.u8,b=S.u16},{"b","a"})
+assert(buffer.tostring(S.encode(ordered,value))=="\2\3\1")
+assert(not pcall(S.struct,{a=S.u8,b=S.u16},{"a","a"}))
+assert(not pcall(S.struct,{a=S.u8,b=S.u16},{"a"}))
+assert(not pcall(S.struct,{a=S.u8,b=S.u16},{"a","z"}))
+local flags=S.packed_struct({alive=S.bool,health=S.range(0,100)})
+local encoded=S.encode(flags,{alive=true,health=99})
+assert(buffer.len(encoded)==1)
+local decoded=S.decode(flags,encoded)
+assert(decoded.alive==true and decoded.health==99)
+local delta=S.delta(first)
+local output={a=0,b=0}
+delta.decode_into(delta.encode(output,value),output)
+assert(output.a==1 and output.b==0x0302)
+for _,empty in {S.struct({}),S.object({}),S.packed({}),S.packed_struct({}),S.tuple({})} do
+	assert(empty.size==0)
+	assert(buffer.len(S.encode(empty,{}))==0)
+	assert(type(S.decode(empty,buffer.create(0)))=="table")
+end
+local empty_delta=S.delta(S.struct({}))
+local empty_baseline={}
+assert(buffer.len(empty_delta.encode(empty_baseline,{}))==0)
+assert(empty_delta.decode_into(buffer.create(0),empty_baseline)==empty_baseline)
+assert(not pcall(empty_delta.decode_into,buffer.create(1),empty_baseline))
+print("Struct tests: deterministic layout, ordering, inference-compatible roundtrips passed")

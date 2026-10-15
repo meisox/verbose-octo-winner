@@ -2,6 +2,8 @@
 --!native
 
 local Types = require("../Types")
+local schema_list = require("../Internal/schema_list")
+local uint24 = require("../Internal/uint24")
 
 type Array<T> = Types.Array<T>
 type Dictionary<K, V> = Types.Dictionary<K, V>
@@ -18,28 +20,26 @@ local function read_zero(_source: buffer, _offset: number): number
 	return 0
 end
 
-return function<T>(fields: Array<Field<T>>): Codec<T>
-	local count = #fields
+type Record = {[string]: any}
 
-	if count == 0 then
-		error("Serdes.packed expected at least one field")
-	end
+return function(fields: Array<Field<any>>): Codec<Record>
+	local count = schema_list(fields, "packed")
 
 	local names = table.create(count) :: Array<string>
-	local packers = table.create(count) :: Array<Packer<T>>
+	local packers = table.create(count) :: Array<Packer<any>>
 
 	local packed_names = table.create(count) :: Array<string>
 	local shifts = table.create(count) :: Array<number>
 	local widths = table.create(count) :: Array<number>
-	local unsafe_packers = table.create(count) :: Array<Packer<T>>
-	local packed_packers = table.create(count) :: Array<Packer<T>>
-	local unpackers = table.create(count) :: Array<Unpacker<T>>
-	local unsafe_unpackers = table.create(count) :: Array<Unpacker<T>>
+	local unsafe_packers = table.create(count) :: Array<Packer<any>>
+	local packed_packers = table.create(count) :: Array<Packer<any>>
+	local unpackers = table.create(count) :: Array<Unpacker<any>>
+	local unsafe_unpackers = table.create(count) :: Array<Unpacker<any>>
 
 	local zero_names = table.create(count) :: Array<string>
-	local zero_packers = table.create(count) :: Array<Packer<T>>
-	local zero_unpackers = table.create(count) :: Array<Unpacker<T>>
-	local zero_unsafe_unpackers = table.create(count) :: Array<Unpacker<T>>
+	local zero_packers = table.create(count) :: Array<Packer<any>>
+	local zero_unpackers = table.create(count) :: Array<Unpacker<any>>
+	local zero_unsafe_unpackers = table.create(count) :: Array<Unpacker<any>>
 
 	local seen: Dictionary<string, boolean> = {}
 	local packed_count = 0
@@ -79,8 +79,8 @@ return function<T>(fields: Array<Field<T>>): Codec<T>
 			error(`Serdes.packed field '{name}' codec is not packable`)
 		end
 
-		if total_bits + width > 32 then
-			error("Serdes.packed cannot contain more than 32 bits")
+		if total_bits + width > 8_589_934_592 then
+			error("Serdes.packed encoded size exceeds the maximum buffer size")
 		end
 
 		seen[name] = true
@@ -107,6 +107,55 @@ return function<T>(fields: Array<Field<T>>): Codec<T>
 		total_bits += width
 	end
 
+	-- Keep the single-word implementation below for small records. Larger
+	-- records use native bit accesses, including fields crossing word boundaries.
+	if total_bits > 32 then
+		local size = math.ceil(total_bits / 8)
+		local padding = size * 8 - total_bits
+		local function validate(value: Record): ()
+			if type(value) ~= "table" then error("Serdes.packed expected table") end
+			local record = value :: any
+			for index = 1, count do packers[index](record[names[index]]) end
+		end
+		local function compile_writer(selected: Array<Packer<any>>, checked: boolean)
+			return function(target: buffer, offset: number, value: Record): ()
+				if checked and type(value) ~= "table" then error("Serdes.packed expected table") end
+				local record = value :: any
+				local start = offset * 8
+				for index = 1, packed_count do
+					buffer.writebits(target, start + shifts[index], widths[index], selected[index](record[packed_names[index]]))
+				end
+				if checked then
+					for index = 1, zero_count do zero_packers[index](record[zero_names[index]]) end
+				end
+				if padding > 0 then buffer.writebits(target, start + total_bits, padding, 0) end
+			end
+		end
+		local function compile_reader(selected: Array<Unpacker<any>>, zero_selected: Array<Unpacker<any>>, checked: boolean)
+			return function(source: buffer, offset: number, output: Record?): Record
+				local record = if output == nil then {} else output :: any
+				local start = offset * 8
+				if checked and padding > 0 and buffer.readbits(source, start + total_bits, padding) ~= 0 then
+					error("Serdes.packed decoded nonzero padding bits")
+				end
+				for index = 1, packed_count do
+					record[packed_names[index]] = selected[index](buffer.readbits(source, start + shifts[index], widths[index]))
+				end
+				for index = 1, zero_count do record[zero_names[index]] = zero_selected[index](0) end
+				return record
+			end
+		end
+		local write = compile_writer(packed_packers, true)
+		local unsafe_write = compile_writer(unsafe_packers, false)
+		return table.freeze({
+			size = size, validate = validate,
+			write = write, unsafe_write = unsafe_write,
+			write_fresh = write, unsafe_write_fresh = unsafe_write,
+			read = compile_reader(unpackers, zero_unpackers, true),
+			unsafe_read = compile_reader(unsafe_unpackers, zero_unsafe_unpackers, false),
+		})
+	end
+
 	local SIZE: number
 	local storage_bits: number
 	local write_word: WordWriter
@@ -127,6 +176,11 @@ return function<T>(fields: Array<Field<T>>): Codec<T>
 		storage_bits = 16
 		write_word = buffer.writeu16
 		raw_read_word = buffer.readu16
+	elseif total_bits <= 24 then
+		SIZE = 3
+		storage_bits = 24
+		write_word = uint24.write
+		raw_read_word = uint24.read
 	else
 		SIZE = 4
 		storage_bits = 32
@@ -152,7 +206,7 @@ return function<T>(fields: Array<Field<T>>): Codec<T>
 		end
 	end
 
-	local function validate(value: T): ()
+	local function validate(value: Record): ()
 		if type(value) ~= "table" then
 			error(`Serdes.packed expected table, got {typeof(value)}`)
 		end
@@ -164,7 +218,7 @@ return function<T>(fields: Array<Field<T>>): Codec<T>
 		end
 	end
 
-	local function unsafe_write(target: buffer, offset: number, value: T): ()
+	local function unsafe_write(target: buffer, offset: number, value: Record): ()
 		local record: Dictionary<string, any> = value :: any
 		local word = 0
 
@@ -175,7 +229,7 @@ return function<T>(fields: Array<Field<T>>): Codec<T>
 		write_word(target, offset, word)
 	end
 
-	local function write(target: buffer, offset: number, value: T): ()
+	local function write(target: buffer, offset: number, value: Record): ()
 		if type(value) ~= "table" then
 			error(`Serdes.packed expected table, got {typeof(value)}`)
 		end
@@ -194,7 +248,7 @@ return function<T>(fields: Array<Field<T>>): Codec<T>
 		write_word(target, offset, word)
 	end
 
-	local function read(source: buffer, offset: number, output: T?): T
+	local function read(source: buffer, offset: number, output: Record?): Record
 		local result = if output == nil then {} :: any else output
 		local record: Dictionary<string, any> = result :: any
 		local word = read_word(source, offset)
@@ -210,7 +264,7 @@ return function<T>(fields: Array<Field<T>>): Codec<T>
 		return result
 	end
 
-	local function unsafe_read(source: buffer, offset: number, output: T?): T
+	local function unsafe_read(source: buffer, offset: number, output: Record?): Record
 		local result = if output == nil then {} :: any else output
 		local record: Dictionary<string, any> = result :: any
 		local word = raw_read_word(source, offset)

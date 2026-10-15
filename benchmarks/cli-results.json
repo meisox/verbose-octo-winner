@@ -1,0 +1,32 @@
+{
+  "baseline": "0327edf02a82b52bd1d1401b98d253e98dfe7ced",
+  "sourceHash": "64df0b4aab3210d5f02cfc14c1b56df274a03f1d39e6ce76b53c111a4dbb4661",
+  "platform": "win32",
+  "createdAt": "2026-10-15T07:22:16.788Z",
+  "runs": [
+    {
+      "suite": "compare",
+      "native": true,
+      "command": "luau -O2 --codegen benchmarks/compare.luau",
+      "csv": "case,operation,old_bytes,new_bytes,old_ns,new_ns,new_over_old\r\nu8,write,1,1,15.9,8.2,0.514\r\nu8,read_reuse,1,1,17.1,10.7,0.625\r\nbits20,write,4,3,16.9,16.0,0.944\r\nbits20,read_reuse,4,3,20.9,21.7,1.038\r\nquantized16,write,2,2,11.6,11.5,0.999\r\nquantized16,read_reuse,2,2,11.2,11.3,1.014\r\npacked24,write,4,3,100.2,50.4,0.503\r\npacked24,read_reuse,4,3,98.6,49.3,0.499\r\narray_u8_256,write,256,256,803.1,817.0,1.017\r\narray_u8_256,read_reuse,256,256,333.7,338.0,1.013\r\narray_u16_256,write,512,512,942.8,968.4,1.027\r\narray_u16_256,read_reuse,512,512,541.0,559.0,1.033\r\narray_u32_256,write,1024,1024,1161.8,1165.2,1.003\r\narray_u32_256,read_reuse,1024,1024,678.0,672.4,0.992\r\n"
+    },
+    {
+      "suite": "dynamic",
+      "native": true,
+      "command": "luau -O2 --codegen benchmarks/dynamic.luau",
+      "csv": "case,operation,old_bytes,new_bytes,old_ns,new_ns,new_over_old\r\nvaru32,encode,2,2,59.6,55.1,0.924\r\nvaru32,decode_reuse,2,2,42.5,42.9,1.008\r\nstring_12,encode,13,13,77.0,87.7,1.139\r\nstring_12,decode_reuse,13,13,71.4,67.9,0.950\r\nstring_large_max,encode,16,15,73.4,85.4,1.164\r\nstring_large_max,decode_reuse,16,15,71.9,71.2,0.989\r\narray_u8_8,encode,10,10,396.8,144.0,0.363\r\narray_u8_8,decode_reuse,10,10,269.7,69.3,0.257\r\narray_u32_8,encode,34,34,397.1,161.2,0.406\r\narray_u32_8,decode_reuse,34,34,283.0,79.2,0.280\r\narray_u8_256,encode,258,258,10092.5,1350.2,0.134\r\narray_u8_256,decode_reuse,258,258,7352.5,405.2,0.055\r\narray_u32_256,encode,1026,1026,10817.8,2116.4,0.196\r\narray_u32_256,decode_reuse,1026,1026,7258.6,699.6,0.096\r\narray_u8_10000,encode,10002,10002,404273.0,49035.0,0.121\r\narray_u8_10000,decode_reuse,10002,10002,282990.0,11660.0,0.041\r\narray_u32_10000,encode,40002,40002,425206.0,87380.0,0.206\r\narray_u32_10000,decode_reuse,40002,40002,323747.0,26731.0,0.083\r\nobject,encode,413,413,4895.9,1066.3,0.218\r\nobject,decode_reuse,413,413,4250.3,811.6,0.191\r\nrle_256,encode,5,5,2418.0,2438.6,1.009\r\nrle_256,decode_reuse,5,5,1118.9,775.0,0.693\r\ndelta_array_256,encode,258,258,11873.5,8395.5,0.707\r\ndelta_array_256,decode_reuse,258,258,8108.7,7493.8,0.924\r\n"
+    },
+    {
+      "suite": "compare",
+      "native": false,
+      "command": "luau -O2 benchmarks/compare.luau",
+      "csv": "case,operation,old_bytes,new_bytes,old_ns,new_ns,new_over_old\r\nu8,write,1,1,24.3,24.0,0.986\r\nu8,read_reuse,1,1,14.9,14.3,0.957\r\nbits20,write,4,3,34.3,42.3,1.234\r\nbits20,read_reuse,4,3,23.9,32.3,1.353\r\nquantized16,write,2,2,32.8,33.4,1.020\r\nquantized16,read_reuse,2,2,19.0,18.5,0.973\r\npacked24,write,4,3,113.2,122.6,1.084\r\npacked24,read_reuse,4,3,97.6,92.8,0.951\r\narray_u8_256,write,256,256,4047.4,4095.4,1.012\r\narray_u8_256,read_reuse,256,256,2057.6,1995.9,0.970\r\narray_u16_256,write,512,512,4712.6,4771.7,1.013\r\narray_u16_256,read_reuse,512,512,2396.2,2346.0,0.979\r\narray_u32_256,write,1024,1024,4697.0,4593.9,0.978\r\narray_u32_256,read_reuse,1024,1024,2082.9,2244.7,1.078\r\n"
+    },
+    {
+      "suite": "dynamic",
+      "native": false,
+      "command": "luau -O2 benchmarks/dynamic.luau",
+      "csv": "case,operation,old_bytes,new_bytes,old_ns,new_ns,new_over_old\r\nvaru32,encode,2,2,106.9,111.3,1.041\r\nvaru32,decode_reuse,2,2,83.3,82.8,0.994\r\nstring_12,encode,13,13,116.8,124.5,1.066\r\nstring_12,decode_reuse,13,13,85.1,85.9,1.010\r\nstring_large_max,encode,16,15,103.4,131.6,1.273\r\nstring_large_max,decode_reuse,16,15,85.4,89.9,1.053\r\narray_u8_8,encode,10,10,490.8,341.9,0.697\r\narray_u8_8,decode_reuse,10,10,297.5,202.4,0.680\r\narray_u32_8,encode,34,34,502.7,375.1,0.746\r\narray_u32_8,decode_reuse,34,34,301.6,195.8,0.649\r\narray_u8_256,encode,258,258,13757.0,5185.5,0.377\r\narray_u8_256,decode_reuse,258,258,7339.1,2062.7,0.281\r\narray_u32_256,encode,1026,1026,12983.5,7201.0,0.555\r\narray_u32_256,decode_reuse,1026,1026,7489.2,2058.2,0.275\r\narray_u8_10000,encode,10002,10002,476902.0,200938.0,0.421\r\narray_u8_10000,decode_reuse,10002,10002,290951.0,78297.0,0.269\r\narray_u32_10000,encode,40002,40002,524888.0,272788.0,0.520\r\narray_u32_10000,decode_reuse,40002,40002,283609.0,75846.0,0.267\r\nobject,encode,413,413,5511.6,3162.2,0.574\r\nobject,decode_reuse,413,413,3199.6,1053.9,0.329\r\nrle_256,encode,5,5,4709.7,5072.8,1.077\r\nrle_256,decode_reuse,5,5,1095.6,1153.4,1.053\r\ndelta_array_256,encode,258,258,16998.2,14400.3,0.847\r\ndelta_array_256,decode_reuse,258,258,12545.7,12798.0,1.020\r\n"
+    }
+  ]
+}

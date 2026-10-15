@@ -43,7 +43,7 @@ return function(size: number): Codec<buffer>
 	end
 
 	local function read(source: buffer, offset: number, output: buffer?): buffer
-		local result = if output == nil then buffer.create(size) else output
+		local result = if output == nil or buffer.len(output) ~= size then buffer.create(size) else output
 
 		buffer.copy(result, 0, source, offset, size)
 

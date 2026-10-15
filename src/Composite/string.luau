@@ -118,7 +118,7 @@ local function create_u8(capacity: number): Codec<string>
 
 	return table.freeze({
 		size = SIZE,
-		delta_safe = true,
+		delta_safe = true, key_safe = true,
 
 		validate = validate,
 		unsafe_write = unsafe_write,
@@ -241,7 +241,7 @@ local function create_u16(capacity: number): Codec<string>
 
 	return table.freeze({
 		size = SIZE,
-		delta_safe = true,
+		delta_safe = true, key_safe = true,
 
 		validate = validate,
 		unsafe_write = unsafe_write,

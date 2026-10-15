@@ -2,6 +2,7 @@
 --!native
 
 local Types = require("../Types")
+local uint24 = require("../Internal/uint24")
 
 type Codec<T> = Types.Codec<T>
 type WordWriter = (target: buffer, offset: number, value: number) -> ()
@@ -34,6 +35,10 @@ return function(bit_count: number): Codec<number>
 		size = 2
 		write_word = buffer.writeu16
 		read_word = buffer.readu16
+	elseif bit_count <= 24 then
+		size = 3
+		write_word = uint24.write
+		read_word = uint24.read
 	else
 		size = 4
 		write_word = buffer.writeu32
@@ -68,7 +73,7 @@ return function(bit_count: number): Codec<number>
 
 	local read: Reader
 
-	if bit_count == 8 or bit_count == 16 or bit_count == 32 then
+	if bit_count == 8 or bit_count == 16 or bit_count == 24 or bit_count == 32 then
 		read = function(source: buffer, offset: number, _output: number?): number
 			return read_word(source, offset)
 		end
@@ -110,7 +115,7 @@ return function(bit_count: number): Codec<number>
 
 	return table.freeze({
 		size = size,
-		delta_safe = true,
+		delta_safe = true, key_safe = true,
 
 		validate = validate,
 		unsafe_write = unsafe_write,

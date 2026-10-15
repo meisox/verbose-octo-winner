@@ -2,6 +2,8 @@
 --!native
 
 local Types = require("../Types")
+local schema_list = require("../Internal/schema_list")
+local uint24 = require("../Internal/uint24")
 local required_bits = require("../Internal/bits")
 
 type Array<T> = Types.Array<T>
@@ -11,7 +13,7 @@ type Codec<T> = Types.Codec<T>
 local MAX_COUNT = 4_294_967_296
 
 return function<T>(values: Array<T>): Codec<T>
-	local count = #values
+	local count = schema_list(values, "enum")
 
 	if count == 0 then
 		error("Serdes.enum expected at least one value")
@@ -99,7 +101,7 @@ return function<T>(values: Array<T>): Codec<T>
 
 		return table.freeze({
 			size = 0,
-			delta_safe = true,
+			delta_safe = true, key_safe = true,
 
 			validate = validate,
 			unsafe_write = unsafe_write,
@@ -146,7 +148,7 @@ return function<T>(values: Array<T>): Codec<T>
 
 		return table.freeze({
 			size = 1,
-			delta_safe = true,
+			delta_safe = true, key_safe = true,
 
 			validate = validate,
 			unsafe_write = unsafe_write,
@@ -193,7 +195,7 @@ return function<T>(values: Array<T>): Codec<T>
 
 		return table.freeze({
 			size = 2,
-			delta_safe = true,
+			delta_safe = true, key_safe = true,
 
 			validate = validate,
 			unsafe_write = unsafe_write,
@@ -209,7 +211,53 @@ return function<T>(values: Array<T>): Codec<T>
 			unpack = unpack,
 			unsafe_unpack = unsafe_unpack,
 		})
-	else
+	elseif max_id <= 16_777_215 then
+		local function unsafe_write(target: buffer, offset: number, value: T): ()
+			uint24.write(target, offset, to_id[value])
+		end
+
+		local function write(target: buffer, offset: number, value: T): ()
+			local id = to_id[value]
+			if id == nil then
+				error(`Serdes.enum received unknown value {tostring(value)}`)
+			end
+
+			uint24.write(target, offset, id)
+		end
+
+		local function read(source: buffer, offset: number, _output: T?): T
+			local id = uint24.read(source, offset)
+			local value = to_value[id + 1]
+
+			if value == nil then
+				error(`Serdes.enum decoded unknown id {id}`)
+			end
+
+			return value
+		end
+
+		local function unsafe_read(source: buffer, offset: number, _output: T?): T
+			return to_value[uint24.read(source, offset) + 1] :: any
+		end
+
+		return table.freeze({
+			size = 3,
+			delta_safe = true, key_safe = true,
+
+			validate = validate,
+			unsafe_write = unsafe_write,
+			write = write,
+			unsafe_write_fresh = unsafe_write,
+			write_fresh = write,
+			read = read,
+			unsafe_read = unsafe_read,
+
+			bits = bits,
+			unsafe_pack = unsafe_pack,
+			pack = pack,
+			unpack = unpack,
+			unsafe_unpack = unsafe_unpack,
+		})	else
 		local function unsafe_write(target: buffer, offset: number, value: T): ()
 			buffer.writeu32(target, offset, to_id[value])
 		end
@@ -240,7 +288,7 @@ return function<T>(values: Array<T>): Codec<T>
 
 		return table.freeze({
 			size = 4,
-			delta_safe = true,
+			delta_safe = true, key_safe = true,
 
 			validate = validate,
 			unsafe_write = unsafe_write,

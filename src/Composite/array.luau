@@ -2,6 +2,7 @@
 --!native
 
 local Types = require("../Types")
+local sequence = require("../Internal/sequence")
 
 type Array<T> = Types.Array<T>
 type Codec<T> = Types.Codec<T>
@@ -9,7 +10,7 @@ type ArrayWriter<T> = Types.ArrayWriter<T>
 type ArrayReader<T> = Types.ArrayReader<T>
 
 return function<T>(element: Codec<T>, count: number): Codec<Array<T>>
-	if type(count) ~= "number" or not math.isfinite(count) or count % 1 ~= 0 or count < 0 then
+	if type(count) ~= "number" or not math.isfinite(count) or count % 1 ~= 0 or count < 0 or count > 1_073_741_824 then
 		error(`Serdes.array expected a non-negative integer count, got {count}`)
 	end
 
@@ -21,10 +22,11 @@ return function<T>(element: Codec<T>, count: number): Codec<Array<T>>
 
 	local SIZE = element_size * count
 
-	if not math.isfinite(SIZE) then
+	if not math.isfinite(SIZE) or SIZE > 1_073_741_824 then
 		error("Serdes.array encoded size overflowed")
 	end
 
+	local validate_sequence = sequence(count, element.nullable == true, "array")
 	local element_validate = element.validate
 	local element_unsafe_write = element.unsafe_write
 	local element_write = element.write
@@ -41,15 +43,7 @@ return function<T>(element: Codec<T>, count: number): Codec<Array<T>>
 	local array_unsafe_read = element.array_unsafe_read
 
 	local function validate(value: Array<T>): ()
-		if type(value) ~= "table" then
-			error(`Serdes.array expected table, got {typeof(value)}`)
-		end
-
-		local actual_count = #value
-
-		if actual_count ~= count then
-			error(`Serdes.array expected exactly {count} elements, got {actual_count}`)
-		end
+		validate_sequence(value)
 
 		for index = 1, count do
 			element_validate(value[index])
@@ -73,21 +67,15 @@ return function<T>(element: Codec<T>, count: number): Codec<Array<T>>
 		end
 
 		write = function(target: buffer, offset: number, value: Array<T>): ()
-			if type(value) ~= "table" then
-				error(`Serdes.array expected table, got {typeof(value)}`)
-			end
-
-			local actual_count = #value
-
-			if actual_count ~= count then
-				error(`Serdes.array expected exactly {count} elements, got {actual_count}`)
-			end
+			validate_sequence(value)
 
 			bulk_write(target, offset, value, count)
 		end
 
 		read = function(source: buffer, offset: number, output: Array<T>?): Array<T>
-			return bulk_read(source, offset, count, output)
+			local result = bulk_read(source, offset, count, output)
+			for index = #result, count + 1, -1 do result[index] = nil :: any end
+			return result
 		end
 	else
 		unsafe_write = function(target: buffer, offset: number, value: Array<T>): ()
@@ -100,15 +88,7 @@ return function<T>(element: Codec<T>, count: number): Codec<Array<T>>
 		end
 
 		write = function(target: buffer, offset: number, value: Array<T>): ()
-			if type(value) ~= "table" then
-				error(`Serdes.array expected table, got {typeof(value)}`)
-			end
-
-			local actual_count = #value
-
-			if actual_count ~= count then
-				error(`Serdes.array expected exactly {count} elements, got {actual_count}`)
-			end
+			validate_sequence(value)
 
 			local element_offset = offset
 
@@ -134,6 +114,7 @@ return function<T>(element: Codec<T>, count: number): Codec<Array<T>>
 				element_offset += element_size
 			end
 
+			for index = #result, count + 1, -1 do result[index] = nil :: any end
 			return result
 		end
 	end
@@ -147,15 +128,7 @@ return function<T>(element: Codec<T>, count: number): Codec<Array<T>>
 		end
 
 		write_fresh = function(target: buffer, offset: number, value: Array<T>): ()
-			if type(value) ~= "table" then
-				error(`Serdes.array expected table, got {typeof(value)}`)
-			end
-
-			local actual_count = #value
-
-			if actual_count ~= count then
-				error(`Serdes.array expected exactly {count} elements, got {actual_count}`)
-			end
+			validate_sequence(value)
 
 			bulk_write_fresh(target, offset, value, count)
 		end
@@ -170,15 +143,7 @@ return function<T>(element: Codec<T>, count: number): Codec<Array<T>>
 		end
 
 		write_fresh = function(target: buffer, offset: number, value: Array<T>): ()
-			if type(value) ~= "table" then
-				error(`Serdes.array expected table, got {typeof(value)}`)
-			end
-
-			local actual_count = #value
-
-			if actual_count ~= count then
-				error(`Serdes.array expected exactly {count} elements, got {actual_count}`)
-			end
+			validate_sequence(value)
 
 			local element_offset = offset
 
@@ -193,7 +158,9 @@ return function<T>(element: Codec<T>, count: number): Codec<Array<T>>
 		local bulk_unsafe_read: ArrayReader<T> = array_unsafe_read
 
 		unsafe_read = function(source: buffer, offset: number, output: Array<T>?): Array<T>
-			return bulk_unsafe_read(source, offset, count, output)
+			local result = bulk_unsafe_read(source, offset, count, output)
+			for index = #result, count + 1, -1 do result[index] = nil :: any end
+			return result
 		end
 	else
 		unsafe_read = function(source: buffer, offset: number, output: Array<T>?): Array<T>
@@ -212,6 +179,7 @@ return function<T>(element: Codec<T>, count: number): Codec<Array<T>>
 				element_offset += element_size
 			end
 
+			for index = #result, count + 1, -1 do result[index] = nil :: any end
 			return result
 		end
 	end

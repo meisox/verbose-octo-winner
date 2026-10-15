@@ -1,0 +1,28 @@
+name: Checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: CompeyDev/setup-rokit@v0.1.2
+      - name: Install Luau CLI tools
+        run: |
+          curl -fsSL https://github.com/luau-lang/luau/releases/download/0.742/luau-ubuntu.zip -o "$RUNNER_TEMP/luau.zip"
+          unzip -q "$RUNNER_TEMP/luau.zip" -d "$RUNNER_TEMP/luau"
+          chmod +x "$RUNNER_TEMP/luau/"*
+          echo "$RUNNER_TEMP/luau" >> "$GITHUB_PATH"
+      - run: node scripts/test.cjs
+      - run: node scripts/check-types.cjs
+      - run: rojo build default.project.json --output build/Serdes.rbxm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Serdes
+          path: build/Serdes.rbxm

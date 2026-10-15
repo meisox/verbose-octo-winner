@@ -60,7 +60,7 @@ local function array_write(target: buffer, offset: number, values: { number }, c
 end
 
 local function array_read(source: buffer, offset: number, count: number, output: { number }?): { number }
-	local result = if output == nil then table.create(count) else output
+	local result: {number} = if output == nil then table.create(count) :: {number} else output
 	local read_offset = offset
 
 	for index = 1, count do
@@ -71,9 +71,18 @@ local function array_read(source: buffer, offset: number, count: number, output:
 	return result
 end
 
+local function array_validate(values: {number}, count: number): ()
+	for index = 1, count do
+		local value = values[index]
+		if type(value) ~= "number" or value % 1 ~= 0 or value < 0 or value > 4294967295 then
+			error(`Serdes.u32 received invalid array value at index {index}: {value}`)
+		end
+	end
+end
+
 return table.freeze({
 	size = SIZE,
-	delta_safe = true,
+	delta_safe = true, key_safe = true,
 
 	validate = validate,
 	unsafe_write = unsafe_write,
@@ -85,6 +94,7 @@ return table.freeze({
 
 	array_unsafe_write = array_unsafe_write,
 	array_write = array_write,
+	array_validate = array_validate,
 	array_unsafe_write_fresh = array_unsafe_write,
 	array_write_fresh = array_write,
 	array_read = array_read,
