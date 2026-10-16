@@ -2,126 +2,69 @@
 --!native
 
 local Types = require("../Types")
+local schema_list = require("../Internal/schema_list")
+local as_dynamic = require("../Internal/as_dynamic")
+local check_size = require("../Internal/size")
+type Record = {[string]: any}
+type Writer = (buffer, number, any) -> number
+type Reader = (buffer, number, any?) -> (any, number)
 
-type Array<T> = Types.Array<T>
-type Dictionary<K, V> = Types.Dictionary<K, V>
-type DynamicCodec<T> = Types.DynamicCodec<T>
-type DynamicField<T> = Types.DynamicField<T>
-type Measurer = (value: any) -> number
-type Writer = (target: buffer, offset: number, value: any) -> number
-type Reader = (source: buffer, offset: number, output: any?) -> (any, number)
-
-return function<T>(fields: Array<DynamicField<T>>): DynamicCodec<T>
-	local count = #fields
-
-	if count == 0 then
-		error("Serdes.dynamic.object expected at least one field")
+return function(fields: {Types.DynamicField<any>}): Types.DynamicCodec<Record>
+	local count = schema_list(fields, "dynamic.object")
+	local names = table.create(count) :: {string}
+	local measurers: {(any) -> number}, unsafe_measurers: {(any) -> number} = {}, {}
+	local writers: {Writer}, unsafe_writers: {Writer}, fresh_writers: {Writer} = {}, {}, {}
+	local readers: {Reader}, unsafe_readers: {Reader} = {}, {}
+	local seen = {}
+	local minimum, maximum = 0, 0
+	local bounded, static = true, true
+	for i = 1, count do
+		local field = fields[i]
+		local name, codec = field.name, as_dynamic(field.codec)
+		if type(name) ~= "string" or name == "" or seen[name] then error(`Serdes.dynamic.object invalid or duplicate field '{name}'`) end
+		seen[name], names[i] = true, name
+		measurers[i], unsafe_measurers[i] = codec.measure, codec.unsafe_measure
+		writers[i], unsafe_writers[i] = codec.write, codec.unsafe_write
+		fresh_writers[i] = codec.unsafe_write_fresh or codec.unsafe_write
+		readers[i], unsafe_readers[i] = codec.read, codec.unsafe_read
+		minimum += codec.min_size
+		if codec.max_size then maximum += codec.max_size else bounded = false end
+		static = static and codec.fixed_size ~= nil
 	end
-
-	local names = table.create(count) :: Array<string>
-	local measurers = table.create(count) :: Array<Measurer>
-	local unsafe_writers = table.create(count) :: Array<Writer>
-	local writers = table.create(count) :: Array<Writer>
-	local readers = table.create(count) :: Array<Reader>
-	local unsafe_readers = table.create(count) :: Array<Reader>
-	local seen: Dictionary<string, boolean> = {}
-
-	for index = 1, count do
-		local field = fields[index]
-		local name = field.name
-		local codec = field.codec
-
-		if type(name) ~= "string" or name == "" then
-			error(`Serdes.dynamic.object field {index} has an invalid name`)
+	check_size(minimum)
+	local function compile_measure(selected: {(any) -> number}, checked: boolean)
+		return function(value: Record): number
+			if checked and type(value) ~= "table" then error("Serdes.dynamic.object expected record table") end
+			local size = 0
+			for i = 1, count do size += selected[i](value[names[i]]) end
+			return if checked then check_size(size) else size
 		end
-
-		if seen[name] then
-			error(`Serdes.dynamic.object received duplicate field '{name}'`)
-		end
-
-		seen[name] = true
-		names[index] = name
-		measurers[index] = codec.measure
-		unsafe_writers[index] = codec.unsafe_write
-		writers[index] = codec.write
-		readers[index] = codec.read
-		unsafe_readers[index] = codec.unsafe_read
 	end
-
-	local function measure(value: T): number
-		local record: Dictionary<string, any> = value :: any
-		local size = 0
-
-		for index = 1, count do
-			size += measurers[index](record[names[index]])
+	local function compile_writer(selected: {Writer}, checked: boolean)
+		return function(target: buffer, offset: number, value: Record): number
+			if checked and type(value) ~= "table" then error("Serdes.dynamic.object expected record table") end
+			local position = offset
+			for i = 1, count do position = selected[i](target, position, value[names[i]]) end
+			return position
 		end
-
-		return size
 	end
-
-	local function unsafe_write(target: buffer, offset: number, value: T): number
-		local record: Dictionary<string, any> = value :: any
-		local next_offset = offset
-
-		for index = 1, count do
-			next_offset = unsafe_writers[index](target, next_offset, record[names[index]])
+	local function compile_reader(selected: {Reader})
+		return function(source: buffer, offset: number, output: Record?): (Record, number)
+			local result = if output == nil then {} else output
+			local position = offset
+			for i = 1, count do
+				local name = names[i]
+				result[name], position = selected[i](source, position, result[name])
+			end
+			return result, position
 		end
-
-		return next_offset
 	end
-
-	local function write(target: buffer, offset: number, value: T): number
-		if type(value) ~= "table" then
-			error(`Serdes.dynamic.object expected table, got {typeof(value)}`)
-		end
-
-		local record: Dictionary<string, any> = value :: any
-		local next_offset = offset
-
-		for index = 1, count do
-			next_offset = writers[index](target, next_offset, record[names[index]])
-		end
-
-		return next_offset
-	end
-
-	local function read(source: buffer, offset: number, output: T?): (T, number)
-		local result = if output == nil then {} :: any else output
-		local record: Dictionary<string, any> = result :: any
-		local next_offset = offset
-
-		for index = 1, count do
-			local name = names[index]
-			local value: any
-
-			value, next_offset = readers[index](source, next_offset, record[name])
-			record[name] = value
-		end
-
-		return result, next_offset
-	end
-
-	local function unsafe_read(source: buffer, offset: number, output: T?): (T, number)
-		local result = if output == nil then {} :: any else output
-		local record: Dictionary<string, any> = result :: any
-		local next_offset = offset
-
-		for index = 1, count do
-			local name = names[index]
-			local value: any
-
-			value, next_offset = unsafe_readers[index](source, next_offset, record[name])
-			record[name] = value
-		end
-
-		return result, next_offset
-	end
-
 	return table.freeze({
-		measure = measure,
-		unsafe_write = unsafe_write,
-		write = write,
-		read = read,
-		unsafe_read = unsafe_read,
+		measure = compile_measure(measurers, true), unsafe_measure = compile_measure(unsafe_measurers, false),
+		min_size = minimum, max_size = if bounded then math.min(maximum, 1_073_741_824) else nil,
+		fixed_size = if static then minimum else nil,
+		write = compile_writer(writers, true), unsafe_write = compile_writer(unsafe_writers, false),
+		unsafe_write_fresh = compile_writer(fresh_writers, false),
+		read = compile_reader(readers), unsafe_read = compile_reader(unsafe_readers),
 	})
 end

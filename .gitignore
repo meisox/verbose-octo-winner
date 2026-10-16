@@ -1,0 +1,4 @@
+tests/.generated/
+tests/.baseline/
+benchmarks/results/
+build/

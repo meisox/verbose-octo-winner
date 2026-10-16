@@ -14,8 +14,15 @@ local function unzigzag(value: number): number
 	return if value % 2 == 0 then value / 2 else -(value + 1) / 2
 end
 
+local function unsafe_measure(value: number): number
+	return varu32.unsafe_measure(zigzag(value))
+end
+
 local function measure(value: number): number
-	return varu32.measure(zigzag(value))
+	if type(value) ~= "number" or value % 1 ~= 0 or value < MIN_I32 or value > MAX_I32 then
+		error(`Serdes.dynamic.vari32 expected integer in [{MIN_I32}, {MAX_I32}], got {value}`)
+	end
+	return unsafe_measure(value)
 end
 
 local function unsafe_write(target: buffer, offset: number, value: number): number
@@ -46,9 +53,12 @@ end
 
 return table.freeze({
 	measure = measure,
+	unsafe_measure = unsafe_measure,
+	min_size = 1, max_size = 5,
 	unsafe_write = unsafe_write,
+	unsafe_write_fresh = unsafe_write,
 	write = write,
 	read = read,
 	unsafe_read = unsafe_read,
-	value_like = true,
+	value_like = true, key_safe = true,
 })

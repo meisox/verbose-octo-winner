@@ -2,6 +2,8 @@
 --!native
 
 local Types = require("./Types")
+local uint24 = require("./Internal/uint24")
+local wide = require("./Internal/delta_wide")
 
 type Array<T> = Types.Array<T>
 type Dictionary<K, V> = Types.Dictionary<K, V>
@@ -13,6 +15,9 @@ type DeltaSchema<T> = Codec<T> & {
 	delta_names: Array<string>?,
 	delta_codecs: Array<Codec<any>>?,
 }
+
+local function write_zero(_target: buffer, _offset: number, _value: number): () end
+local function read_zero(_source: buffer, _offset: number): number return 0 end
 
 return function<T>(schema: Codec<T>): DeltaCodec<T>
 	local metadata = schema :: DeltaSchema<T>
@@ -26,15 +31,19 @@ return function<T>(schema: Codec<T>): DeltaCodec<T>
 	local count = #names
 
 	if count > 32 then
-		error("Serdes.delta cannot contain more than 32 fields")
+		return wide(names, codecs) :: any
 	end
+	local header_size = math.ceil(count / 8)
+	local write_mask = if header_size == 0 then write_zero elseif header_size == 1 then buffer.writeu8 elseif header_size == 2 then buffer.writeu16 elseif header_size == 3 then uint24.write else buffer.writeu32
+	local read_mask = if header_size == 0 then read_zero elseif header_size == 1 then buffer.readu8 elseif header_size == 2 then buffer.readu16 elseif header_size == 3 then uint24.read else buffer.readu32
 
 	local sizes = table.create(count) :: Array<number>
 	local masks = table.create(count) :: Array<number>
 	local unsafe_writers = table.create(count) :: Array<Writer>
-	local writers = table.create(count) :: Array<Writer>
 	local readers = table.create(count) :: Array<Reader>
 	local unsafe_readers = table.create(count) :: Array<Reader>
+	local validators = table.create(count) :: Array<(value: any) -> ()>
+	local equivalents: {((any, any) -> boolean)?} = {}
 
 	for index = 1, count do
 		local codec = codecs[index]
@@ -46,9 +55,10 @@ return function<T>(schema: Codec<T>): DeltaCodec<T>
 		sizes[index] = codec.size
 		masks[index] = bit32.lshift(1, index - 1)
 		unsafe_writers[index] = codec.unsafe_write_fresh
-		writers[index] = codec.write_fresh
 		readers[index] = codec.read
 		unsafe_readers[index] = codec.unsafe_read
+		validators[index] = codec.validate
+		equivalents[index] = codec.wire_equal
 	end
 
 	local unused_mask = if count == 32 then 0 else bit32.bnot(2 ^ count - 1)
@@ -69,21 +79,23 @@ return function<T>(schema: Codec<T>): DeltaCodec<T>
 
 		for index = 1, count do
 			local name = names[index]
+			validators[index](current_record[name])
 
-			if current_record[name] ~= baseline_record[name] then
+			local equal = equivalents[index]
+			if current_record[name] ~= baseline_record[name] and (equal == nil or not equal(current_record[name], baseline_record[name])) then
 				mask = bit32.bor(mask, masks[index])
 				payload_size += sizes[index]
 			end
 		end
 
-		local target = buffer.create(4 + payload_size)
-		buffer.writeu32(target, 0, mask)
+		local target = buffer.create(header_size + payload_size)
+		write_mask(target, 0, mask)
 
-		local offset = 4
+		local offset = header_size
 
 		for index = 1, count do
 			if bit32.btest(mask, masks[index]) then
-				writers[index](target, offset, current_record[names[index]])
+				unsafe_writers[index](target, offset, current_record[names[index]])
 				offset += sizes[index]
 			end
 		end
@@ -100,16 +112,17 @@ return function<T>(schema: Codec<T>): DeltaCodec<T>
 		for index = 1, count do
 			local name = names[index]
 
-			if current_record[name] ~= baseline_record[name] then
+			local equal = equivalents[index]
+			if current_record[name] ~= baseline_record[name] and (equal == nil or not equal(current_record[name], baseline_record[name])) then
 				mask = bit32.bor(mask, masks[index])
 				payload_size += sizes[index]
 			end
 		end
 
-		local target = buffer.create(4 + payload_size)
-		buffer.writeu32(target, 0, mask)
+		local target = buffer.create(header_size + payload_size)
+		write_mask(target, 0, mask)
 
-		local offset = 4
+		local offset = header_size
 
 		for index = 1, count do
 			if bit32.btest(mask, masks[index]) then
@@ -126,37 +139,51 @@ return function<T>(schema: Codec<T>): DeltaCodec<T>
 			error(`Serdes.delta decode_into expected buffer, got {typeof(source)}`)
 		end
 
-		local mask = buffer.readu32(source, 0)
+		local mask = read_mask(source, 0)
 
 		if unused_mask ~= 0 and bit32.band(mask, unused_mask) ~= 0 then
 			error(`Serdes.delta decoded invalid change mask {mask}`)
 		end
 
+		if type(output) ~= "table" or table.isfrozen(output :: any) or getmetatable(output :: any) ~= nil then
+			error("Serdes.delta decode_into expected a plain writable baseline table")
+		end
+
+		local expected = header_size
+		for index = 1, count do
+			if bit32.btest(mask, masks[index]) then
+				expected += sizes[index]
+			end
+		end
+		if expected ~= buffer.len(source) then
+			error(`Serdes.delta expected exactly {expected} bytes, got {buffer.len(source)}`)
+		end
+
 		local record: Dictionary<string, any> = output :: any
-		local offset = 4
+		local pending = table.create(count)
+		local offset = header_size
 
 		for index = 1, count do
 			if bit32.btest(mask, masks[index]) then
-				local name = names[index]
-
-				record[name] = readers[index](source, offset, record[name])
+				pending[index] = readers[index](source, offset)
 				offset += sizes[index]
 			end
 		end
 
-		local actual = buffer.len(source)
-
-		if offset ~= actual then
-			error(`Serdes.delta expected exactly {offset} bytes, got {actual}`)
+		-- Value-like fields can be staged without mutating the caller's baseline.
+		for index = 1, count do
+			if bit32.btest(mask, masks[index]) then
+				record[names[index]] = pending[index]
+			end
 		end
 
-		return output
+		return output :: T
 	end
 
 	local function unsafe_decode_into(source: buffer, output: T): T
-		local mask = buffer.readu32(source, 0)
+		local mask = read_mask(source, 0)
 		local record: Dictionary<string, any> = output :: any
-		local offset = 4
+		local offset = header_size
 
 		for index = 1, count do
 			if bit32.btest(mask, masks[index]) then

@@ -3,6 +3,8 @@
 
 local Types = require("../Types")
 local varu32 = require("./varu32")
+local array_count = require("../Internal/array_count")
+local check_size = require("../Internal/size")
 
 type Array<T> = Types.Array<T>
 type DynamicCodec<T> = Types.DynamicCodec<T>
@@ -20,24 +22,40 @@ return function(maximum_count: number): DynamicCodec<Array<number>>
 		error(`Serdes.dynamic.delta_array expected integer maximum in [0, {MAX_U32}], got {maximum_count}`)
 	end
 
-	local function measure(values: Array<number>): number
+	local function unsafe_measure(values: Array<number>): number
 		local count = #values
-		local size = varu32.measure(count)
+		local size = varu32.unsafe_measure(count)
 
 		if count == 0 then
 			return size
 		end
 
 		local previous = values[1]
-		size += varu32.measure(previous)
+		size += varu32.unsafe_measure(previous)
 
 		for index = 2, count do
 			local value = values[index]
-			size += varu32.measure(value - previous)
+			size += varu32.unsafe_measure(value - previous)
 			previous = value
 		end
 
 		return size
+	end
+
+	local count_values = array_count(maximum_count, false, "dynamic.delta_array")
+	local function measure(values: Array<number>): number
+		local count = count_values(values)
+		local size = varu32.unsafe_measure(count)
+		local previous = 0
+		for index = 1, count do
+			local value = values[index]
+			if type(value) ~= "number" or value % 1 ~= 0 or value < previous or value > MAX_U32 then
+				error(`Serdes.dynamic.delta_array received invalid or decreasing value at index {index}`)
+			end
+			size += varu32.unsafe_measure(value - previous)
+			previous = value
+		end
+		return check_size(size)
 	end
 
 	local function unsafe_write(target: buffer, offset: number, values: Array<number>): number
@@ -106,7 +124,9 @@ return function(maximum_count: number): DynamicCodec<Array<number>>
 			error(`Serdes.dynamic.delta_array decoded invalid count {count}`)
 		end
 
-		local result = if output == nil then table.create(count) else output
+		if count > buffer.len(source) - next_offset then error("Serdes.dynamic.delta_array truncated payload") end
+
+		local result: Array<number> = if output == nil then table.create(math.min(count, 4096)) :: Array<number> else output
 		local old_count = #result
 
 		if count > 0 then
@@ -136,7 +156,7 @@ return function(maximum_count: number): DynamicCodec<Array<number>>
 
 	local function unsafe_read(source: buffer, offset: number, output: Array<number>?): (Array<number>, number)
 		local count, next_offset = varu32.unsafe_read(source, offset)
-		local result = if output == nil then table.create(count) else output
+		local result: Array<number> = if output == nil then table.create(count) :: Array<number> else output
 		local old_count = #result
 
 		if count > 0 then
@@ -161,7 +181,10 @@ return function(maximum_count: number): DynamicCodec<Array<number>>
 
 	return table.freeze({
 		measure = measure,
+		unsafe_measure = unsafe_measure,
+		min_size = 1, max_size = math.min(1_073_741_824, varu32.unsafe_measure(maximum_count) + maximum_count * 5),
 		unsafe_write = unsafe_write,
+		unsafe_write_fresh = unsafe_write,
 		write = write,
 		read = read,
 		unsafe_read = unsafe_read,

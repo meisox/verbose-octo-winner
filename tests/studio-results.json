@@ -1,0 +1,26 @@
+{
+  "ok": true,
+  "log": {
+    "1": "Compression tests: fixed/dynamic Zstd, size limits, output reuse, malformed frames and adaptive raw fallback passed",
+    "2": "Delta tests: 522 changes passed across mask boundaries",
+    "3": "Dynamic tests: 1155 roundtrips plus malformed input, allocation, and reuse checks passed",
+    "4": "Packing tests: 854 cases passed against independent wire oracle",
+    "5": "Public API tests: 38 scalar cases across offset/batch/unsafe routes, nullable batches, 65 flag layouts, malformed schemas passed",
+    "6": "Quantization tests: 96960 values passed across all widths and floating-point extremes",
+    "7": "Regression tests: 10 passed, 0 failed"
+  },
+  "version": "0.742.0.7421053",
+  "tests": {
+    "Test_roblox": true,
+    "Test_quantization": true,
+    "Test_compression": true,
+    "Test_struct": true,
+    "Test_delta": true,
+    "Test_regressions": true,
+    "Test_packing": true,
+    "Test_dynamic": true,
+    "Test_public": true
+  },
+  "sourceHash": "b519815b91e3e86f490695b38b3e63b3ea55b975294d6220c30a98c9e1e395f5",
+  "note": "Executed all runtime suites in detached ModuleScripts in Studio Server; no place instances or scripts were changed."
+}

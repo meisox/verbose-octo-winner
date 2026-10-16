@@ -2,22 +2,24 @@
 --!native
 
 local Types = require("../Types")
+local schema_list = require("../Internal/schema_list")
 
 type Array<T> = Types.Array<T>
 type Dictionary<K, V> = Types.Dictionary<K, V>
 type Codec<T> = Types.Codec<T>
 type Field<T> = Types.Field<T>
-type Validator<T> = (value: T) -> ()
+type Record = {[string]: any}
+type Validator<T> = (value: Record) -> ()
 type Writer<T> = (target: buffer, offset: number, value: T) -> ()
 type Reader<T> = (source: buffer, offset: number, output: T?) -> T
 
-local function compile_validator<T>(names: Array<string>, validators: Array<Validator<T>>, count: number): (value: T) -> ()
-	return function(value: T): ()
+local function compile_validator(names: Array<string>, validators: Array<Validator<any>>, count: number): (value: Record) -> ()
+	return function(value: Record): ()
 		if type(value) ~= "table" then
 			error(`Serdes.object expected table, got {typeof(value)}`)
 		end
 
-		local record: Dictionary<string, Array<number>> = value
+		local record: Dictionary<string, any> = value
 
 		for index = 1, count do
 			validators[index](record[names[index]])
@@ -25,18 +27,18 @@ local function compile_validator<T>(names: Array<string>, validators: Array<Vali
 	end
 end
 
-local function compile_writer<T>(
+local function compile_writer(
 	names: Array<string>,
 	offsets: Array<number>,
-	writers: Array<Writer<T>>,
+	writers: Array<Writer<any>>,
 	count: number
-): (target: buffer, offset: number, value: T) -> ()
-	return function(target: buffer, offset: number, value: T): ()
+): (target: buffer, offset: number, value: Record) -> ()
+	return function(target: buffer, offset: number, value: Record): ()
 		if type(value) ~= "table" then
 			error(`Serdes.object expected table, got {typeof(value)}`)
 		end
 
-		local record: Dictionary<string, Array<number>> = value
+		local record: Dictionary<string, any> = value
 
 		for index = 1, count do
 			writers[index](target, offset + offsets[index], record[names[index]])
@@ -44,14 +46,14 @@ local function compile_writer<T>(
 	end
 end
 
-local function compile_unsafe_writer<T>(
+local function compile_unsafe_writer(
 	names: Array<string>,
 	offsets: Array<number>,
-	writers: Array<Writer<T>>,
+	writers: Array<Writer<any>>,
 	count: number
-): (target: buffer, offset: number, value: T) -> ()
-	return function(target: buffer, offset: number, value: T): ()
-		local record: Dictionary<string, Array<number>> = value
+): (target: buffer, offset: number, value: Record) -> ()
+	return function(target: buffer, offset: number, value: Record): ()
+		local record: Dictionary<string, any> = value
 
 		for index = 1, count do
 			writers[index](target, offset + offsets[index], record[names[index]])
@@ -59,14 +61,14 @@ local function compile_unsafe_writer<T>(
 	end
 end
 
-local function compile_reader<T>(
+local function compile_reader(
 	names: Array<string>,
 	offsets: Array<number>,
-	readers: Array<Reader<T>>,
+	readers: Array<Reader<any>>,
 	count: number
-): Reader<T>
-	return function(source: buffer, offset: number, output: T?): T
-		local result: T
+): Reader<Record>
+	return function(source: buffer, offset: number, output: Record?): Record
+		local result: Record
 
 		if output == nil then
 			result = {} :: any
@@ -86,24 +88,20 @@ local function compile_reader<T>(
 	end
 end
 
-return function<T>(fields: Array<Field<T>>): Codec<T>
-	local count = #fields
-
-	if count == 0 then
-		error("Serdes.object expected at least one field")
-	end
+return function(fields: Array<Field<any>>): Codec<Record>
+	local count = schema_list(fields, "object")
 
 	local names = table.create(count) :: Array<string>
 	local offsets = table.create(count) :: Array<number>
-	local codecs = table.create(count) :: Array<Codec<T>>
+	local codecs = table.create(count) :: Array<Codec<any>>
 
-	local validators = table.create(count) :: Array<Validator<T>>
-	local writers = table.create(count) :: Array<Writer<T>>
-	local unsafe_writers = table.create(count) :: Array<Writer<T>>
-	local fresh_writers = table.create(count) :: Array<Writer<T>>
-	local unsafe_fresh_writers = table.create(count) :: Array<Writer<T>>
-	local readers = table.create(count) :: Array<Reader<T>>
-	local unsafe_readers = table.create(count) :: Array<Reader<T>>
+	local validators = table.create(count) :: Array<Validator<any>>
+	local writers = table.create(count) :: Array<Writer<any>>
+	local unsafe_writers = table.create(count) :: Array<Writer<any>>
+	local fresh_writers = table.create(count) :: Array<Writer<any>>
+	local unsafe_fresh_writers = table.create(count) :: Array<Writer<any>>
+	local readers = table.create(count) :: Array<Reader<any>>
+	local unsafe_readers = table.create(count) :: Array<Reader<any>>
 
 	local seen: Dictionary<string, boolean> = {}
 	local size = 0
@@ -142,7 +140,7 @@ return function<T>(fields: Array<Field<T>>): Codec<T>
 
 		size += length
 
-		if not math.isfinite(size) then
+		if not math.isfinite(size) or size > 1_073_741_824 then
 			error("Serdes.object encoded size overflowed")
 		end
 	end

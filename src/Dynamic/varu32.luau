@@ -3,7 +3,7 @@
 
 local MAX_U32 = 4_294_967_295
 
-local function measure(value: number): number
+local function unsafe_measure(value: number): number
 	if value < 0x80 then
 		return 1
 	elseif value < 0x4000 then
@@ -14,6 +14,17 @@ local function measure(value: number): number
 		return 4
 	end
 
+	return 5
+end
+
+local function measure(value: number): number
+	if type(value) ~= "number" or value % 1 ~= 0 or value < 0 or value > MAX_U32 then
+		error(`Serdes.dynamic.varu32 expected integer in [0, {MAX_U32}], got {value}`)
+	end
+	if value < 0x80 then return 1 end
+	if value < 0x4000 then return 2 end
+	if value < 0x20_0000 then return 3 end
+	if value < 0x1000_0000 then return 4 end
 	return 5
 end
 
@@ -44,10 +55,6 @@ local function write_value(target: buffer, offset: number, value: number): numbe
 	buffer.writeu8(target, offset + 3, value // 0x20_0000 % 0x80 + 0x80)
 	buffer.writeu8(target, offset + 4, value // 0x1000_0000)
 	return offset + 5
-end
-
-local function unsafe_write(target: buffer, offset: number, value: number): number
-	return write_value(target, offset, value)
 end
 
 local function write(target: buffer, offset: number, value: number): number
@@ -110,9 +117,12 @@ end
 
 return table.freeze({
 	measure = measure,
-	unsafe_write = unsafe_write,
+	unsafe_measure = unsafe_measure,
+	min_size = 1, max_size = 5,
+	unsafe_write = write_value,
+	unsafe_write_fresh = write_value,
 	write = write,
 	read = read,
 	unsafe_read = unsafe_read,
-	value_like = true,
+	value_like = true, key_safe = true,
 })
